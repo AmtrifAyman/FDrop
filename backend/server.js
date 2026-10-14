@@ -7,6 +7,10 @@ const app = express();
 app.use(cors());
 
 const server = http.createServer(app);
+const normalizeRoomId = (roomId) => (
+    typeof roomId === 'string' ? roomId.trim().toUpperCase() : ''
+);
+const isValidRoomId = (roomId) => /^[A-Z0-9_-]{1,64}$/.test(roomId);
 
 // Kanswbo Socket.io wa kan3tiweh sela7iya (CORS) bax React y9dar ytasel bih
 const io = new Server(server, {
@@ -21,15 +25,25 @@ io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     // Mni PC awla Tele kaydkhol l room
-    socket.on('join-room', (roomId) => {
+    socket.on('join-room', (requestedRoomId) => {
+        const roomId = normalizeRoomId(requestedRoomId);
+        if (!isValidRoomId(roomId)) {
+            socket.emit('room-error', { message: 'Invalid room code.' });
+            return;
+        }
         socket.join(roomId);
         console.log(`User ${socket.id} joined room ${roomId}`);
     });
 
     // Mni kaysiftu les données dyal WebRTC binathom
     socket.on('send-signal', (data) => {
+        const roomId = normalizeRoomId(data?.roomId);
+        if (!isValidRoomId(roomId) || !data.signal) {
+            socket.emit('room-error', { message: 'Unable to send a signal for this room.' });
+            return;
+        }
         // Kansifto signal l-taraf l-akhar li f nafs l-room
-        socket.to(data.roomId).emit('receive-signal', {
+        socket.to(roomId).emit('receive-signal', {
             signal: data.signal,
             sender: socket.id
         });
